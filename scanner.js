@@ -57,6 +57,8 @@ export async function createBarcodeReader(callback = console.log, {
 	chimeType = CHIME_TYPE,
 	chimeVolume = CHIME_VOLUME,
 	errorHandler = reportError,
+	width,
+	height,
 	signal,
 } = {}) {
 	const { promise, resolve, reject } = Promise.withResolvers();
@@ -68,6 +70,7 @@ export async function createBarcodeReader(callback = console.log, {
 	} else {
 		let frame = NaN;
 		const controller = new AbortController();
+		const loadController = new AbortController();
 		const sig = signal instanceof AbortSignal
 			? AbortSignal.any([signal, controller.signal])
 			: controller.signal;
@@ -77,20 +80,17 @@ export async function createBarcodeReader(callback = console.log, {
 		const video = document.createElement('video');
 		const stream = await navigator.mediaDevices.getUserMedia({
 			audio: false,
-			video: { frameRate, facingMode },
+			video: { frameRate, facingMode, width, height },
 		});
+
+		const [track] = stream.getVideoTracks();
 
 		video.srcObject = stream;
 		video.play();
 
-		const canvas = new OffscreenCanvas(640, 480);
-		const ctx = canvas.getContext('2d');
-
 		async function drawFrame() {
 			try {
-				ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-				const results = await scanner.detect(ctx.canvas).catch(err => {
+				const results = await scanner.detect(video).catch(err => {
 					reportError(err);
 					return [];
 				});
@@ -110,24 +110,30 @@ export async function createBarcodeReader(callback = console.log, {
 		}
 
 		video.addEventListener('loadedmetadata', ({ target }) => {
-			const tracks = stream.getVideoTracks();
-			const { width, height } = tracks[0].getSettings();
+			const { width, height } = track.getSettings();
 			target.width = width;
 			target.height = height;
-			canvas.width = width;
-			canvas.height = height;
-			resolve({ controller, video, stream, wakeLock });
+			resolve({ controller, video, stream, wakeLock, signal: sig });
 			drawFrame();
+			loadController.abort();
 		}, { once: true, signal: sig });
 
-		sig.addEventListener('abort', async () => {
+		video.addEventListener('error', () => {
+			loadController.abort();
+			controller.abort(new DOMException('Error loading video stream.'));
+		}, { once: true, signal: sig });
+
+		sig.addEventListener('abort', async ({ target }) => {
 			video.cancelVideoFrameCallback(frame);
 			video.pause();
-			ctx.reset();
 			stream.getTracks().forEach(track => track.stop());
 
 			if (typeof wakeLock === 'object') {
 				await wakeLock.release();
+			}
+
+			if (! loadController.signal.aborted) {
+				loadController.abort(target.reason);
 			}
 		}, { once: true });
 	}
