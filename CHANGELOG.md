@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.0.1] - 2025-05-29
+
+### Fixed
+- Avoid use of `OffscreenCanvas` and just use `<video>` directly
+
 ## [v1.0.0] - 2025-05-01
 
 Initial Release
