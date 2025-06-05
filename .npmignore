@@ -9,6 +9,7 @@ node_modules/
 .nvmrc
 importmap.json
 importmap.yaml
+index.js
 *.config.js
 *.test.js
 *.gz

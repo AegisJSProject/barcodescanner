@@ -1,17 +1,8 @@
 // Barcode formats
-export const AZTEC = 'aztec';
-export const CODE_128 = 'code_128';
-export const CODE_39 = 'code_39';
-export const CODE_93 = 'code_93';
-export const CODEBAR = 'codabar';
-export const DATA_MATRIX = 'data_matrix';
-export const EAN_13 = 'ean_13';
-export const EAN_8 = 'ean_8';
-export const ITF = 'itf';
-export const PDF417 = 'pdf417';
-export const QR_CODE = 'qr_code';
-export const UPC_A = 'upc_a';
-export const UPC_E = 'upc_e';
+import { UPC_A, QR_CODE } from './formats.js';
+import { BarcodeDetectorPatch } from './rxing.js';
+
+export const NATIVE_SUPPORT = 'BarcodeDetector' in globalThis;
 
 export const DEFAULT_BARCODE_FORMATS = [UPC_A, QR_CODE];
 
@@ -47,6 +38,8 @@ function playChime({
 	osc.stop(ctx.currentTime + duration); // Short chime
 }
 
+const BarcodeDetector = 'BarcodeDetector' in globalThis ? globalThis.BarcodeDetector : BarcodeDetectorPatch;
+
 export async function createBarcodeReader(callback = console.log, {
 	delay = SCAN_DELAY,
 	facingMode = FACING_MODE,
@@ -63,9 +56,7 @@ export async function createBarcodeReader(callback = console.log, {
 } = {}) {
 	const { promise, resolve, reject } = Promise.withResolvers();
 
-	if (! ('BarcodeDetector' in globalThis)) {
-		reject(new DOMException('`BarcodeDetector` is not supported.'));
-	} else if (signal instanceof AbortSignal && signal.aborted) {
+	if (signal instanceof AbortSignal && signal.aborted) {
 		reject(signal.reason);
 	} else {
 		let frame = NaN;
@@ -75,7 +66,7 @@ export async function createBarcodeReader(callback = console.log, {
 			? AbortSignal.any([signal, controller.signal])
 			: controller.signal;
 
-		const scanner = new globalThis.BarcodeDetector({ formats });
+		const scanner = new BarcodeDetector({ formats });
 		const wakeLock = 'wakeLock' in navigator ? await navigator.wakeLock.request('screen').catch(() => undefined) : undefined;
 		const video = document.createElement('video');
 		const stream = await navigator.mediaDevices.getUserMedia({

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.1.0] - 2025-06-05
+
+### Added
+- Add partial fallback for non-Chromium browsers using [`rxing-wasm`](https://github.com/rxing-core/rxing-wasm/)
+
 ## [v1.0.1] - 2025-05-29
 
 ### Fixed
