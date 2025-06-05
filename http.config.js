@@ -22,7 +22,7 @@ const doc = `<!DOCTYPE html>
 </html>`;
 
 const csp = `default-src 'self';
-script-src 'self' https://unpkg.com/@aegisjsproject/ https://unpkg.com/@shgysk8zer0/ https://unpkg.com/rxing-wasm@0.3.6/rxing_wasm_bg.js 'wasm-unsafe-eval' '${integrity}';
+script-src 'self' https://unpkg.com/@aegisjsproject/ https://unpkg.com/@shgysk8zer0/ https://unpkg.com/rxing-wasm@0.3.6/rxing_wasm_bg.js '${integrity}' 'wasm-unsafe-eval';
 style-src 'self' blob:;
 connect-src 'self' https://unpkg.com/rxing-wasm@0.3.6/rxing_wasm_bg.wasm;
 require-trusted-types-for 'script';

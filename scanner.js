@@ -131,3 +131,5 @@ export async function createBarcodeReader(callback = console.log, {
 
 	return promise;
 }
+
+export * from './formats.js';
