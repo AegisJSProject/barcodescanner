@@ -1,4 +1,4 @@
-import { createBarcodeReader } from './scanner.min.js';
+import { createBarcodeReader } from './scanner.js';
 
 const controller = new AbortController();
 const signal = controller.signal;
@@ -8,7 +8,7 @@ const results = await createBarcodeReader(({ rawValue, format }) => {
 	const li = document.createElement('li');
 	li.textContent = `[${format}] ${rawValue}`;
 	document.getElementById('results').append(li);
-}, { frameRate: 1, signal }).catch(err => {
+}, { frameRate: 24, signal }).catch(err => {
 	controller.abort(err);
 	reportError(err);
 	const li = document.createElement('li');
