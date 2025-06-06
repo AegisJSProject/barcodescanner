@@ -1,10 +1,10 @@
-import { createBarcodeReader } from './scanner.js';
+import { createBarcodeScanner } from './scanner.js';
 
 const controller = new AbortController();
 const signal = controller.signal;
 const btn = document.createElement('button');
 
-const results = await createBarcodeReader(({ rawValue, format }) => {
+const results = await createBarcodeScanner(({ rawValue, format }) => {
 	const li = document.createElement('li');
 	li.textContent = `[${format}] ${rawValue}`;
 	document.getElementById('results').append(li);

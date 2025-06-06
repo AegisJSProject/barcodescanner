@@ -1,10 +1,9 @@
 // Barcode formats
-import { UPC_A, QR_CODE } from './formats.js';
-import { BarcodeDetectorPatch } from './rxing.js';
+import { UPC_A, UPC_E, QR_CODE } from './formats.js';
+import { BarcodeDetectorPatch, NATIVE_SUPPORT } from './rxing.js';
 
-export const NATIVE_SUPPORT = 'BarcodeDetector' in globalThis;
-
-export const DEFAULT_BARCODE_FORMATS = [UPC_A, QR_CODE];
+export { NATIVE_SUPPORT };
+export const DEFAULT_BARCODE_FORMATS = [UPC_A, UPC_E, QR_CODE];
 
 // Scanner config
 export const FRAME_RATE = 12;
@@ -38,9 +37,9 @@ function playChime({
 	osc.stop(ctx.currentTime + duration); // Short chime
 }
 
-const BarcodeDetector = 'BarcodeDetector' in globalThis ? globalThis.BarcodeDetector : BarcodeDetectorPatch;
+const BarcodeDetector = NATIVE_SUPPORT ? globalThis.BarcodeDetector : BarcodeDetectorPatch;
 
-export async function createBarcodeReader(callback = console.log, {
+export async function createBarcodeScanner(callback = console.log, {
 	delay = SCAN_DELAY,
 	facingMode = FACING_MODE,
 	formats = DEFAULT_BARCODE_FORMATS,
@@ -130,6 +129,14 @@ export async function createBarcodeReader(callback = console.log, {
 	}
 
 	return promise;
+}
+
+/**
+ * @deprecated
+ */
+export async function createBarcodeReader(...args) {
+	console.warn('`createBarcodeReader` is deprecated and will be removed. It has been renamed to `createBarcodeScanner`.');
+	return await createBarcodeScanner.apply(null, args);
 }
 
 export * from './formats.js';
