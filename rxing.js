@@ -2,13 +2,13 @@ import {
 	AZTEC, CODABAR, CODE_39, CODE_93, CODE_128, DATA_MATRIX, EAN_8, EAN_13, ITF, PDF417, QR_CODE, UPC_A, UPC_E,
 } from './formats.js';
 
-const NATIVE_SUPPORT = 'BarcodeDetector' in globalThis;
+export const NATIVE_SUPPORT = 'BarcodeDetector' in globalThis;
+export const RXING_WASM_BG = 'https://unpkg.com/rxing-wasm@0.3.6/rxing_wasm_bg.js';
+export const RXING_WASM = 'https://unpkg.com/rxing-wasm@0.3.6/rxing_wasm_bg.wasm';
 
 const { resolve, reject, promise } = Promise.withResolvers();
 let loaded = false;
-
-export const RXING_WASM_BG = 'https://unpkg.com/rxing-wasm@0.3.6/rxing_wasm_bg.js';
-export const RXING_WASM = 'https://unpkg.com/rxing-wasm@0.3.6/rxing_wasm_bg.wasm';
+let preloaded = false;
 
 const RXING_FORMATS = Object.freeze({
 	[AZTEC]: 'AZTEC',
@@ -45,8 +45,6 @@ const DETECTOR_FORMATS = Object.freeze([
 	UPC_E,
 ]);
 
-let preloaded = false;
-
 const SUPPORTED_FORMATS = Object.freeze([
 	AZTEC, CODABAR, CODE_39, CODE_93, CODE_128, DATA_MATRIX, EAN_8, EAN_13, ITF, PDF417, QR_CODE, UPC_A, UPC_E,
 ]);
@@ -78,6 +76,37 @@ export async function initializeRxing({ signal } = {}) {
 	}
 
 	return promise;
+}
+
+export class DetectedBarcode {
+	#rawValue;
+	#format;
+	#boundingBox;
+	#cornerPoints;
+
+	constructor(result) {
+		this.#rawValue = result.text();
+		this.#format = DETECTOR_FORMATS[result.format()];
+		this.#cornerPoints = result.result_points();
+
+		result.free();
+	}
+
+	get rawValue() {
+		return this.#rawValue;
+	}
+
+	get format() {
+		return this.#format;
+	}
+
+	get boundingBox() {
+		return this.#boundingBox;
+	}
+
+	get cornerPoints() {
+		return this.#cornerPoints;
+	}
 }
 
 export class BarcodeDetectorPatch {
@@ -115,11 +144,21 @@ export class BarcodeDetectorPatch {
 
 		if (! preloaded) {
 			Promise.try(() => {
-				const link = document.createElement('link');
-				link.relList.add('module-preload');
-				link.crossOrigin = 'anonymous';
-				link.href = RXING_WASM_BG;
-				document.head.append(link);
+				const module = document.createElement('link');
+				const wasm = document.createElement('link');
+				module.relList.add('modulepreload');
+				module.crossOrigin = 'anonymous';
+				module.referrerPolicy = 'no-referrer';
+				module.fetchPriority = 'high';
+				module.href = RXING_WASM_BG;
+				wasm.relList.add('preload');
+				wasm.as = 'fetch';
+				wasm.type = 'application/wasm';
+				wasm.crossOrigin = 'anonymous';
+				wasm.referrerPolicy = 'no-referrer';
+				wasm.fetchPriority = 'high';
+				wasm.href = RXING_WASM;
+				document.head.append(module, wasm);
 				preloaded = true; // Avoid duplicate preloads
 			});
 		}
@@ -135,58 +174,62 @@ export class BarcodeDetectorPatch {
 		} else {
 
 			if (! (this.#instance instanceof WebAssembly.Instance)) {
-				await this.#initialize();
+				await scheduler.postTask(this.#initialize.bind(this), { priority: 'background' });
 			}
 
 			try {
-				if (data instanceof HTMLCanvasElement || data instanceof OffscreenCanvas) {
-					const ctx = data.getContext('2d');
-					const imgData = ctx.getImageData(0, 0, data.width, data.height);
-					const luma8Data = this.#rxing_wasm_bg.convert_js_image_to_luma(imgData.data);
-					const results = await this.#decode(luma8Data, data.width, data.height);
+				return await scheduler.postTask(async () => {
+					if (data instanceof HTMLCanvasElement || data instanceof OffscreenCanvas) {
+						const ctx = data.getContext('2d');
+						const imgData = ctx.getImageData(0, 0, data.width, data.height);
+						const luma8Data = this.#rxing_wasm_bg.convert_js_image_to_luma(imgData.data);
+						const results = await this.#decode(luma8Data, data.width, data.height);
 
-					return results;
-				} else if (data instanceof ImageBitmap) {
-					const canvas = new OffscreenCanvas(data.width, data.height);
-					const ctx = canvas.getContext('2d');
-					ctx.drawImage(data, 0, 0);
-					const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-					const luma8Data = this.#rxing_wasm_bg.convert_js_image_to_luma(imgData.data);
-					const results = await this.#decode(luma8Data, canvas.width, canvas.height);
+						return results;
+					} else if (data instanceof ImageBitmap) {
+						const canvas = new OffscreenCanvas(data.width, data.height);
+						const ctx = canvas.getContext('2d');
+						ctx.drawImage(data, 0, 0);
+						const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+						const luma8Data = this.#rxing_wasm_bg.convert_js_image_to_luma(imgData.data);
+						const results = await this.#decode(luma8Data, canvas.width, canvas.height);
 
-					return results;
-				} else if (data instanceof HTMLImageElement) {
-					await data.decode();
-					const bitmap = await createImageBitmap(data);
-					const canvas = new OffscreenCanvas(data.naturalWidth, data.naturalHeight);
-					const ctx = canvas.getContext('2d');
-					ctx.drawImage(bitmap, 0, 0);
-					const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-					const luma8Data = this.#rxing_wasm_bg.convert_js_image_to_luma(imgData);
-					const results = await this.#decode(luma8Data, canvas.width, canvas.height);
-					bitmap.close();
+						return results;
+					} else if (data instanceof HTMLImageElement) {
+						await data.decode();
+						const bitmap = await createImageBitmap(data);
+						const canvas = new OffscreenCanvas(data.naturalWidth, data.naturalHeight);
+						const ctx = canvas.getContext('2d');
+						ctx.drawImage(bitmap, 0, 0);
+						const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+						const luma8Data = this.#rxing_wasm_bg.convert_js_image_to_luma(imgData);
+						const results = await this.#decode(luma8Data, canvas.width, canvas.height);
+						bitmap.close();
 
-					return results;
-				} else if (
-					data instanceof HTMLVideoElement
-					|| data instanceof Blob
-					|| data instanceof SVGImageElement
-					|| data instanceof ImageData
-					|| ('VideoFrame' in globalThis && data instanceof globalThis.VideoFrame)
-				) {
-					const bitmap = await createImageBitmap(data);
-					const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
-					const ctx = canvas.getContext('2d');
-					ctx.drawImage(bitmap, 0, 0);
-					const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-					const luma8Data = this.#rxing_wasm_bg.convert_js_image_to_luma(imgData.data);
-					const results = await this.#decode(luma8Data, canvas.width, canvas.height);
-					bitmap.close();
+						return results;
+					} else if (
+						data instanceof HTMLVideoElement
+						|| data instanceof Blob
+						|| data instanceof SVGImageElement
+						|| data instanceof ImageData
+						|| ('VideoFrame' in globalThis && data instanceof globalThis.VideoFrame)
+					) {
+						const bitmap = await createImageBitmap(data);
+						const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+						const ctx = canvas.getContext('2d');
+						ctx.drawImage(bitmap, 0, 0);
+						const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+						const luma8Data = this.#rxing_wasm_bg.convert_js_image_to_luma(imgData.data);
+						const results = await this.#decode(luma8Data, canvas.width, canvas.height);
+						bitmap.close();
 
-					return results;
-				} else {
-					throw new TypeError(ERR_MSG);
-				}
+						return results;
+					} else {
+						throw new TypeError(ERR_MSG);
+					}
+				}, {
+					priority: 'user-visible',
+				});
 			} catch {
 				return [];
 			}
@@ -221,13 +264,7 @@ export class BarcodeDetectorPatch {
 	 * @todo Add `boundingBox` and `cornerPoint` if possible
 	 */
 	#convertResults(results) {
-		return results.map(result => {
-			const rawValue = result.text();
-			const format = DETECTOR_FORMATS[result.format()];
-			const cornerPoints = result.result_points();
-			result.free();
-			return { rawValue, format, cornerPoints };
-		});
+		return results.map(result => new DetectedBarcode(result));
 	}
 
 	static async getSupportedFormats() {
