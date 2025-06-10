@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.1.3] - 2025-06-10
+
+### Changed
+- Update media constraints
+- Make preloading of `rxing-wasm` optional
+- Update loading of WASM & module
+
 ## [v1.1.2] - 2025-06-06
 
 ### Changed

@@ -5,10 +5,13 @@ import {
 export const NATIVE_SUPPORT = 'BarcodeDetector' in globalThis;
 export const RXING_WASM_BG = 'https://unpkg.com/rxing-wasm@0.3.6/rxing_wasm_bg.js';
 export const RXING_WASM = 'https://unpkg.com/rxing-wasm@0.3.6/rxing_wasm_bg.wasm';
+export const RXING_WASM_INTEGRITY = 'sha384-NP3K+7Mgv32ThrJ0lf2AfjK9CVxneqidvqKhCoRJTMraZ5R9zJTQu8GIYAMNXAlK';
+export const RXING_WASM_BG_INTEGRITY = 'sha384-eza+efJvJFhysV93R5a3ocrsf7qb3mjo1b93P5NZwquN0yGQtZrzDozCIc6w6WHb';
 
 const { resolve, reject, promise } = Promise.withResolvers();
 let loaded = false;
-let preloaded = false;
+let preloadedWasm = false;
+let preloadedModule = false;
 
 const RXING_FORMATS = Object.freeze({
 	[AZTEC]: 'AZTEC',
@@ -52,6 +55,103 @@ const SUPPORTED_FORMATS = Object.freeze([
 // Copied from error in Chrome
 const ERR_MSG = 'Failed to execute \'detect\' on \'BarcodeDetector\': The provided value is not of type \'(Blob or HTMLCanvasElement or HTMLImageElement or HTMLVideoElement or ImageBitmap or ImageData or OffscreenCanvas or SVGImageElement or VideoFrame)\'';
 
+async function _preload(href, {
+	rel,
+	fetchPriority = 'high',
+	referrerPolicy = 'no-referrer',
+	integrity,
+	as,
+	type,
+	signal,
+} = {}) {
+	const { resolve, reject, promise } = Promise.withResolvers();
+
+	if (signal instanceof AbortSignal && signal.aborted) {
+		reject(signal.reason);
+	} else {
+		const link = document.createElement('link');
+		const controller = new AbortController();
+		const sig = signal instanceof AbortSignal ? AbortSignal.any([signal, controller.signal]) : controller.signal;
+
+		const load = ({ target }) => {
+			resolve(target);
+			controller.abort();
+			preloadedModule = true;
+		};
+
+		const error = ({ target }) => {
+			const err =  target instanceof AbortSignal ? target.reason : new DOMException(`Error preloading ${target.href}`, 'NetworkError');
+			reject(err);
+			controller.abort(err);
+		};
+
+		link.relList.add(rel);
+		link.crossOrigin = 'anonymous';
+		link.referrerPolicy = referrerPolicy;
+		link.fetchPriority = fetchPriority;
+		link.addEventListener('load', load, { once: true, signal: sig });
+		link.addEventListener('error', error, { once: true, signal: sig });
+
+		if (typeof as === 'string') {
+			link.as = as;
+		}
+
+		if (type === 'string') {
+			link.type = type;
+		}
+
+		if (typeof integrity === 'string') {
+			link.integrity = integrity;
+		}
+
+		link.href = href;
+		document.head.append(link);
+
+		if (signal instanceof AbortSignal) {
+			signal.addEventListener('abort', error, { once: true, signal: controller.signal });
+		}
+	}
+
+	return promise;
+}
+export async function preloadRxingModule({ signal, referrerPolicy = 'no-referrer', fetchPriority = 'high' } = {}) {
+	if (! NATIVE_SUPPORT && ! preloadedModule) {
+		const result = await _preload(RXING_WASM_BG, {
+			rel: 'modulepreload',
+			integrity: RXING_WASM_BG_INTEGRITY,
+			referrerPolicy,
+			fetchPriority,
+			signal,
+		});
+		preloadedModule = true;
+		return result;
+	}
+}
+
+export async function preloadRxingWasm({ signal, referrerPolicy = 'no-referrer', fetchPriority = 'high' } = {}) {
+	if (! NATIVE_SUPPORT && ! preloadedWasm) {
+		const result = await _preload(RXING_WASM, {
+			rel: 'preload',
+			as: 'fetch',
+			type: 'application/wasm',
+			integrity: RXING_WASM_INTEGRITY,
+			referrerPolicy,
+			fetchPriority,
+			signal,
+		});
+
+		preloadedWasm = true;
+		return result;
+	}
+}
+
+export async function preloadRxing({ signal, referrerPolicy = 'no-referrer', fetchPriority = 'high' } = {}) {
+	return await Promise.all([
+		preloadRxingModule({ signal, referrerPolicy, fetchPriority }),
+		preloadRxingWasm({ signal, referrerPolicy, fetchPriority }),
+	]);
+}
+
 export async function initializeRxing({ signal } = {}) {
 	if (signal instanceof AbortSignal && signal.aborted) {
 		throw signal.reason;
@@ -61,6 +161,7 @@ export async function initializeRxing({ signal } = {}) {
 				fetch(RXING_WASM, {
 					headers: { Accept: 'application/wasm' },
 					referrerPolicy: 'no-referrer',
+					integrity: RXING_WASM_INTEGRITY,
 					signal,
 				}),
 				import(RXING_WASM_BG),
@@ -70,6 +171,7 @@ export async function initializeRxing({ signal } = {}) {
 			rxing_wasm_bg.__wbg_set_wasm(instance.exports);
 
 			resolve({ instance, module, rxing_wasm_bg });
+			loaded = true;
 		} catch(err) {
 			reject(err);
 		}
@@ -100,6 +202,9 @@ export class DetectedBarcode {
 		return this.#format;
 	}
 
+	/**
+	 * @todo Add `boundingBox` and `cornerPoint` if possible
+	 */
 	get boundingBox() {
 		return this.#boundingBox;
 	}
@@ -141,27 +246,6 @@ export class BarcodeDetectorPatch {
 		}
 
 		this.#formats = formats;
-
-		if (! preloaded) {
-			Promise.try(() => {
-				const module = document.createElement('link');
-				const wasm = document.createElement('link');
-				module.relList.add('modulepreload');
-				module.crossOrigin = 'anonymous';
-				module.referrerPolicy = 'no-referrer';
-				module.fetchPriority = 'high';
-				module.href = RXING_WASM_BG;
-				wasm.relList.add('preload');
-				wasm.as = 'fetch';
-				wasm.type = 'application/wasm';
-				wasm.crossOrigin = 'anonymous';
-				wasm.referrerPolicy = 'no-referrer';
-				wasm.fetchPriority = 'high';
-				wasm.href = RXING_WASM;
-				document.head.append(module, wasm);
-				preloaded = true; // Avoid duplicate preloads
-			});
-		}
 	}
 
 	get [Symbol.toStringTag]() {
@@ -260,9 +344,6 @@ export class BarcodeDetectorPatch {
 		}
 	}
 
-	/**
-	 * @todo Add `boundingBox` and `cornerPoint` if possible
-	 */
 	#convertResults(results) {
 		return results.map(result => new DetectedBarcode(result));
 	}
