@@ -1,8 +1,8 @@
 // Barcode formats
 import { UPC_A, UPC_E, QR_CODE } from './formats.js';
-import { BarcodeDetectorPatch, NATIVE_SUPPORT } from './rxing.js';
+import { BarcodeDetectorPatch, NATIVE_SUPPORT, preloadRxing, preloadRxingModule, preloadRxingWasm } from './rxing.js';
 
-export { NATIVE_SUPPORT };
+export { NATIVE_SUPPORT, preloadRxing, preloadRxingModule, preloadRxingWasm };
 export const DEFAULT_BARCODE_FORMATS = [UPC_A, UPC_E, QR_CODE];
 
 // Scanner config
@@ -27,23 +27,36 @@ function playChime({
 	const gain = ctx.createGain();
 
 	osc.type = type;
-	osc.frequency.setValueAtTime(frequency, ctx.currentTime); // 1kHz ding
-	gain.gain.setValueAtTime(volume, ctx.currentTime); // Adjust volume
+	osc.frequency.setValueAtTime(frequency, ctx.currentTime);
+	gain.gain.setValueAtTime(volume, ctx.currentTime);
 
 	osc.connect(gain);
 	gain.connect(ctx.destination);
 
 	osc.start();
-	osc.stop(ctx.currentTime + duration); // Short chime
+	osc.addEventListener('ended', () => ctx.close(), { once: true });
+	osc.stop(ctx.currentTime + duration);
 }
 
 const BarcodeDetector = NATIVE_SUPPORT ? globalThis.BarcodeDetector : BarcodeDetectorPatch;
 
+function _getConstraint(val) {
+	switch (typeof val) {
+		case 'object':
+		case 'boolean':
+			return val;
+
+		case 'number':
+		case 'string':
+			return { ideal: val };
+	}
+}
+
 export async function createBarcodeScanner(callback = console.log, {
 	delay = SCAN_DELAY,
-	facingMode = FACING_MODE,
 	formats = DEFAULT_BARCODE_FORMATS,
-	frameRate = FRAME_RATE,
+	facingMode = { ideal: FACING_MODE },
+	frameRate = { ideal: FRAME_RATE },
 	chimeFrequency = CHIME_FREQUENCY,
 	chimeDuration = CHIME_DURATION,
 	chimeType = CHIME_TYPE,
@@ -70,7 +83,12 @@ export async function createBarcodeScanner(callback = console.log, {
 		const video = document.createElement('video');
 		const stream = await navigator.mediaDevices.getUserMedia({
 			audio: false,
-			video: { frameRate, facingMode, width, height },
+			video: {
+				frameRate: _getConstraint(frameRate),
+				facingMode: _getConstraint(facingMode),
+				width: _getConstraint(width),
+				height: _getConstraint(height),
+			},
 		});
 
 		const [track] = stream.getVideoTracks();
@@ -116,6 +134,7 @@ export async function createBarcodeScanner(callback = console.log, {
 		sig.addEventListener('abort', async ({ target }) => {
 			video.cancelVideoFrameCallback(frame);
 			video.pause();
+			video.srcObject = null;
 			stream.getTracks().forEach(track => track.stop());
 
 			if (typeof wakeLock === 'object') {

@@ -1,8 +1,9 @@
-import { createBarcodeScanner } from './scanner.js';
+import { createBarcodeScanner, preloadRxing } from './scanner.js';
 
 const controller = new AbortController();
 const signal = controller.signal;
 const btn = document.createElement('button');
+preloadRxing();
 
 const results = await createBarcodeScanner(({ rawValue, format }) => {
 	const li = document.createElement('li');
