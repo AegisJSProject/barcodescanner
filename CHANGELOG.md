@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.2.0] - 2025-12-10
+
+### Changed
+- Use `ImageCapture` API if available
+- Optimize use of `OffscreenCanvas` in polyfill version
+
 ## [v1.1.3] - 2025-06-10
 
 ### Changed

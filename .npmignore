@@ -10,6 +10,7 @@ node_modules/
 importmap.json
 importmap.yaml
 index.js
+*.html
 *.config.js
 *.test.js
 *.gz
