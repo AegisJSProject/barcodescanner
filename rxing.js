@@ -259,7 +259,7 @@ export class BarcodeDetectorPatch {
 		}
 
 		this.#formats = formats;
-		this.#ctx = this.#canvas.getContext('2d', { willReadFrequently: true });
+		this.#ctx = this.#canvas.getContext('2d', { willReadFrequently: true, alpha: false });
 	}
 
 	get [Symbol.toStringTag]() {
@@ -346,11 +346,8 @@ export class BarcodeDetectorPatch {
 	 * @param {ImageBitmap} bitmap
 	 */
 	async #setBitmap(bitmap, { close = true } = {}) {
-		if (bitmap.width !== this.#canvas.width) {
+		if (bitmap.width !== this.#canvas.width || bitmap.height !== this.#canvas.height) {
 			this.#canvas.width = bitmap.width;
-		}
-
-		if (bitmap.height !== this.#canvas.height) {
 			this.#canvas.height = bitmap.height;
 		}
 
