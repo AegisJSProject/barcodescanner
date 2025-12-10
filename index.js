@@ -1,4 +1,4 @@
-import { createBarcodeScanner, preloadRxing } from './scanner.js';
+import { createBarcodeScanner, preloadRxing } from '@aegisjsproject/barcodescanner/scanner.js';
 
 const controller = new AbortController();
 const signal = controller.signal;

@@ -1,44 +1,32 @@
-import { imports } from '@shgysk8zer0/importmap';
+import { useDefaultCSP, addConnectSrc, addScriptSrc, addPrefetchSrc, addTrustedTypePolicy, WASM_UNSAFE_EVAL, lockCSP } from '@aegisjsproject/http-utils/csp';
+import { RXING_WASM, RXING_WASM_BG, RXING_WASM_BG_INTEGRITY, RXING_WASM_INTEGRITY } from './rxing.js';
+import { Importmap } from '@shgysk8zer0/importmap';
 
-const importmap = JSON.stringify({ imports });
-const integrity = 'sha384-' + await crypto.subtle.digest('SHA-384', new TextEncoder().encode(importmap))
-	.then(hash => new Uint8Array(hash).toBase64());
+const importmap = new Importmap();
+await importmap.importLocalPackage();
 
-const doc = `<!DOCTYPE html>
-<html lang="en" dir="ltr">
-	<head>
-		<meta charset="utf-8" />
-		<meta name="viewport" content="width=device-width" />
-		<meta name="color-scheme" content="light dark" />
-		<title>Test Page</title>
-		<script type="importmap" integrity="${integrity}">${importmap}</script>
-		<script type="application/javascript" defer="" referrerpolicy="no-referrer" fetchpriority="high" crossorigin="anonymous" integrity="sha384-X8d55dt38lBIY87GNkg6Upb9pjtwYlhEoKtw9Sfsbj/XCDV4W+g0kdx4X1Bo/EaO" src="https://unpkg.com/@shgysk8zer0/polyfills@0.4.11/browser.min.js"></script>
-		<script type="module" src="/index.js" referrerpolicy="no-referrer"></script>
-	</head>
-	<head>
-		<h1>Results</h1>
-		<ul id="results"></ul>
-	</head>
-</html>`;
+addScriptSrc(
+	'https://unpkg.com/@aegisjsproject/',
+	'https://unpkg.com/@shgysk8zer0/',
+	RXING_WASM_BG,
+	RXING_WASM_BG_INTEGRITY,
+	WASM_UNSAFE_EVAL,
+);
 
-const csp = `default-src 'self';
-script-src 'self' https://unpkg.com/@aegisjsproject/ https://unpkg.com/@shgysk8zer0/ https://unpkg.com/rxing-wasm@0.3.6/rxing_wasm_bg.js '${integrity}' 'wasm-unsafe-eval';
-style-src 'self' blob:;
-connect-src 'self' https://unpkg.com/rxing-wasm@0.3.6/rxing_wasm_bg.wasm;
-require-trusted-types-for 'script';
-`.replaceAll('\n', '');
+addPrefetchSrc(RXING_WASM_BG, RXING_WASM);
+addConnectSrc(
+	RXING_WASM,
+	RXING_WASM_INTEGRITY,
+);
+addTrustedTypePolicy('aegis-sanitizer#html');
+lockCSP();
 
 export default {
 	pathname: '/',
 	open: true,
 	routes: {
-		'/': () => {
-			return new Response(doc, {
-				headers: {
-					'Content-Type': 'text/html',
-					'Content-Security-Policy': csp,
-				}
-			});
-		}
+		'/': '@aegisjsproject/dev-server/home',
+		'/favicon.svg': '@aegisjsproject/dev-server/favicon',
 	},
+	responsePostprocessors: [useDefaultCSP()]
 };

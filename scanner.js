@@ -79,8 +79,11 @@ export async function createBarcodeScanner(callback = console.log, {
 			: controller.signal;
 
 		const scanner = new BarcodeDetector({ formats });
-		const wakeLock = 'wakeLock' in navigator ? await navigator.wakeLock.request('screen').catch(() => undefined) : undefined;
 		const video = document.createElement('video');
+		const wakeLock = 'wakeLock' in navigator
+			? await navigator.wakeLock.request('screen').catch(() => undefined)
+			: undefined;
+
 		const stream = await navigator.mediaDevices.getUserMedia({
 			audio: false,
 			video: {
@@ -95,10 +98,11 @@ export async function createBarcodeScanner(callback = console.log, {
 
 		video.srcObject = stream;
 		video.play();
+		const capture = 'ImageCapture' in globalThis ? new ImageCapture(track) : undefined;
 
 		async function drawFrame() {
 			try {
-				const results = await scanner.detect(video).catch(err => {
+				const results = await scanner.detect(typeof capture === 'undefined' ? video : await capture.grabFrame()).catch(err => {
 					reportError(err);
 					return [];
 				});
@@ -127,8 +131,10 @@ export async function createBarcodeScanner(callback = console.log, {
 		}, { once: true, signal: sig });
 
 		video.addEventListener('error', () => {
-			loadController.abort();
-			controller.abort(new DOMException('Error loading video stream.'));
+			const err = new DOMException('Error loading video stream.');
+			loadController.abort(err);
+			controller.abort(err);
+			reject(err);
 		}, { once: true, signal: sig });
 
 		sig.addEventListener('abort', async ({ target }) => {
