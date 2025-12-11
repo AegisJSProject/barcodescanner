@@ -114,6 +114,7 @@ async function _preload(href, {
 
 	return promise;
 }
+
 export async function preloadRxingModule({ signal, referrerPolicy = 'no-referrer', fetchPriority = 'high' } = {}) {
 	if (! NATIVE_SUPPORT && ! preloadedModule) {
 		const result = await _preload(RXING_WASM_BG, {
@@ -246,9 +247,9 @@ export class BarcodeDetectorPatch {
 	#canvas = new OffscreenCanvas(0, 0);
 
 	/**
-	 * @type {OffscreenCanvasRenderingContext2D}
+	 * @type {WeakMap<HTMLCanvasElement|OffscreenCanvas, CanvasRenderingContext2D|OffscreenCanvasRenderingContext2D>}
 	 */
-	#ctx;
+	#cached_ctx = new WeakMap();
 
 	constructor({
 		formats = SUPPORTED_FORMATS,
@@ -259,7 +260,6 @@ export class BarcodeDetectorPatch {
 		}
 
 		this.#formats = formats;
-		this.#ctx = this.#canvas.getContext('2d', { willReadFrequently: true, alpha: false });
 	}
 
 	get [Symbol.toStringTag]() {
@@ -270,7 +270,6 @@ export class BarcodeDetectorPatch {
 		if (typeof data !== 'object') {
 			throw new TypeError(ERR_MSG);
 		} else {
-
 			if (! (this.#instance instanceof WebAssembly.Instance)) {
 				await scheduler.postTask(this.#initialize.bind(this), { priority: 'background' });
 			}
@@ -278,7 +277,7 @@ export class BarcodeDetectorPatch {
 			try {
 				return await scheduler.postTask(async () => {
 					if (data instanceof HTMLCanvasElement || data instanceof OffscreenCanvas) {
-						const ctx = data.getContext('2d');
+						const ctx = this.#getContext(data);
 						const imgData = ctx.getImageData(0, 0, data.width, data.height);
 						const luma8Data = this.#rxing_wasm_bg.convert_js_image_to_luma(imgData.data);
 						const results = await this.#decode(luma8Data, data.width, data.height);
@@ -288,13 +287,11 @@ export class BarcodeDetectorPatch {
 						// Do not close the bitmap which may be wanted elsewhere
 						return await this.#setBitmap(data, { close: false });
 					} else if (data instanceof HTMLImageElement) {
-						await data.decode();
-						const bitmap = await createImageBitmap(data);
-
-						return await this.#setBitmap(bitmap);
+						return await this.#setImage(data);
+					} else if (data instanceof HTMLVideoElement) {
+						return await this.#setVideo(data);
 					} else if (
-						data instanceof HTMLVideoElement
-						|| data instanceof Blob
+						data instanceof Blob
 						|| data instanceof SVGImageElement
 						|| data instanceof ImageData
 						|| ('VideoFrame' in globalThis && data instanceof globalThis.VideoFrame)
@@ -313,6 +310,21 @@ export class BarcodeDetectorPatch {
 		}
 	}
 
+	/**
+	 *
+	 * @param {HTMLCanvasElement|OffscreenCanvas} canvas
+	 * @returns {OffscreenCanvasRenderingContext2D|CanvasRenderingContext2D}
+	 */
+	#getContext(canvas) {
+		if (this.#cached_ctx.has(canvas)) {
+			return this.#cached_ctx.get(canvas);
+		} else {
+			const ctx = canvas.getContext('2d', { willReadFrequently: true, alpha: false, desynchronized: false });
+			this.#cached_ctx.set(canvas, ctx);
+			return ctx;
+		}
+	}
+
 	async #initialize({ signal } = {}) {
 		if (! (this.#instance instanceof WebAssembly.Instance)) {
 			const { instance, rxing_wasm_bg } = await initializeRxing({ signal });
@@ -327,6 +339,13 @@ export class BarcodeDetectorPatch {
 		}
 	}
 
+	/**
+	 *
+	 * @param {Uint8Array} luma8Data
+	 * @param {number} width
+	 * @param {number} height
+	 * @returns {Promise<DetectedBarcode[]>}
+	 */
 	async #decode(luma8Data, width, height) {
 		try {
 			const results = this.#rxing_wasm_bg.decode_multi(luma8Data, width, height, this.#hints);
@@ -337,30 +356,77 @@ export class BarcodeDetectorPatch {
 		}
 	}
 
+	/**
+	 *
+	 * @param {object[]} results
+	 * @returns {DetectedBarcode[]}
+	 */
 	#convertResults(results) {
 		return results.map(result => new DetectedBarcode(result));
 	}
 
 	/**
 	 *
+	 * @param {number} width
+	 * @param {number} height
+	 */
+	#resizeCanvas(width, height) {
+		if (width !== this.#canvas.width || height !== this.#canvas.height) {
+			this.#canvas.width = width;
+			this.#canvas.height = height;
+		}
+	}
+
+	/**
+	 *
+	 * @param {HTMLVideoElement} video
+	 * @return {Promise<DetectedBarcode[]>}
+	 */
+	async #setVideo(video) {
+		this.#resizeCanvas(video.width, video.height);
+		return await this.#renderImageData(video);
+	}
+
+	/**
+	 *
+	 * @param {HTMLImageElement} image
+	 * @return {Promise<DetectedBarcode[]>}
+	 */
+	async #setImage(image) {
+		await image.decode();
+		this.#resizeCanvas(image.naturalWidth , image.naturalHeight);
+		return await this.#renderImageData(image);
+	}
+
+	/**
+	 *
 	 * @param {ImageBitmap} bitmap
+	 * @param {object} options
+	 * @param {boolean} [options.close=true]
+	 * @return {Promise<DetectedBarcode[]>}
 	 */
 	async #setBitmap(bitmap, { close = true } = {}) {
-		if (bitmap.width !== this.#canvas.width || bitmap.height !== this.#canvas.height) {
-			this.#canvas.width = bitmap.width;
-			this.#canvas.height = bitmap.height;
-		}
-
-		this.#ctx.drawImage(bitmap, 0, 0);
-		const imgData = this.#ctx.getImageData(0, 0, this.#canvas.width, this.#canvas.height);
-		const luma8Data = this.#rxing_wasm_bg.convert_js_image_to_luma(imgData.data);
-		const results = await this.#decode(luma8Data, this.#canvas.width, this.#canvas.height);
+		this.#resizeCanvas(bitmap.width, bitmap.height);
+		const results = await this.#renderImageData(bitmap);
 
 		if (close) {
 			bitmap.close();
 		}
 
 		return results;
+	}
+
+	/**
+	 *
+	 * @param {CanvasImageSource} data
+	 * @returns {Promise<DetectedBarcode[]>}
+	 */
+	async #renderImageData(data) {
+		const ctx = this.#getContext(this.#canvas);
+		ctx.drawImage(data, 0, 0);
+		const imgData = ctx.getImageData(0, 0, this.#canvas.width, this.#canvas.height);
+		const luma8Data = this.#rxing_wasm_bg.convert_js_image_to_luma(imgData.data);
+		return await this.#decode(luma8Data, this.#canvas.width, this.#canvas.height);
 	}
 
 	static async getSupportedFormats() {

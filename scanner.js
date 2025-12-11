@@ -95,16 +95,13 @@ export async function createBarcodeScanner(callback = console.log, {
 		});
 
 		const [track] = stream.getVideoTracks();
-		const capture = globalThis?.ImageCapture?.prototype?.grabFrame instanceof Function
-			? new ImageCapture(track)
-			: undefined;
 
 		video.srcObject = stream;
 		video.play();
 
 		async function drawFrame() {
 			try {
-				const results = await scanner.detect(typeof capture === 'undefined' ? video : await capture.grabFrame()).catch(err => {
+				const results = await scanner.detect(video).catch(err => {
 					reportError(err);
 					return [];
 				});
