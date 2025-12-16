@@ -1,4 +1,7 @@
-import { useDefaultCSP, addConnectSrc, addScriptSrc, addPrefetchSrc, addTrustedTypePolicy, WASM_UNSAFE_EVAL, lockCSP } from '@aegisjsproject/http-utils/csp';
+import {
+	useDefaultCSP, addConnectSrc, addScriptSrc, addPrefetchSrc, addTrustedTypePolicy,
+	WASM_UNSAFE_EVAL, lockCSP,
+} from '@aegisjsproject/http-utils/csp';
 import { RXING_WASM, RXING_WASM_BG, RXING_WASM_BG_INTEGRITY, RXING_WASM_INTEGRITY } from './rxing.js';
 import { Importmap } from '@shgysk8zer0/importmap';
 

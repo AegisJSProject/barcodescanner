@@ -5,6 +5,15 @@ import { BarcodeDetectorPatch, NATIVE_SUPPORT, preloadRxing, preloadRxingModule,
 export { NATIVE_SUPPORT, preloadRxing, preloadRxingModule, preloadRxingWasm };
 export const DEFAULT_BARCODE_FORMATS = [UPC_A, UPC_E, QR_CODE];
 
+/**
+ * @typedef {Object} DetectedBarcode
+ * @property {string} rawValue The decoded string value of the barcode.
+ * @property {DOMRectReadOnly} boundingBox The bounding box of the detected barcode in the video frame.
+ * @property {string} format The format of the barcode (e.g., "qr_code", "ean_13").
+ * @property {number[]} [cornerPoints] Optional array of corner points (if supported).
+ */
+
+
 // Scanner config
 export const FRAME_RATE = 12;
 export const FACING_MODE = 'environment';
@@ -52,7 +61,27 @@ function _getConstraint(val) {
 	}
 }
 
+/**
+ *
+ * @param {(result: DetectedBarcode) => *} callback The callback to call for scan results on detect
+ * @param {object} options
+ * @param {HTMLVideoElement|string|undefined} [options.video=HTMLVideoElement] The `<video>` element or ID for it, created if nothing given
+ * @param {number} [options.delay=1000] The delay in milliseconds between scans
+ * @param {string[]} [options.formats] An array of barcode formats to detect
+ * @param {string} [options.facingMode="environment"] Front/rear facing camera
+ * @param {number} [options.frameRate=12] The frame rate for the camera
+ * @param {number} [options.chimeFrequency=1000] Frequency of the chime to play on detect in Hz
+ * @param {number} [options.chimeDuration=0.2] Duration of the chime on detect in seconds
+ * @param {OscillatorType} [options.chimeType="sine"] Shape of the audio for the chime
+ * @param {number} [options.chimeVolume=0.2] Chime volume on detect
+ * @param {Function} [options.errorHandler=reportError] Callback for handling errors
+ * @param {number} [options.width] Requested camera width
+ * @param {number} [options.height] Requested camera height
+ * @param {AbortSignal} [options.signal] Abort signal to abort the stream/video
+ * @returns {Promise<{ controller: AbortController, stream: MediaStream, video: HTMLVideoElement, wakeLock: WakeLockSentinel|undefined, signal: AbortSignal }>}
+ */
 export async function createBarcodeScanner(callback = console.log, {
+	video = document.createElement('video'),
 	delay = SCAN_DELAY,
 	formats = DEFAULT_BARCODE_FORMATS,
 	facingMode = { ideal: FACING_MODE },
@@ -68,7 +97,25 @@ export async function createBarcodeScanner(callback = console.log, {
 } = {}) {
 	const { promise, resolve, reject } = Promise.withResolvers();
 
-	if (signal instanceof AbortSignal && signal.aborted) {
+	if (typeof video === 'string') {
+		return await createBarcodeScanner(callback, {
+			video: document.getElementById(video),
+			delay,
+			formats,
+			facingMode,
+			frameRate,
+			chimeFrequency,
+			chimeDuration,
+			chimeType,
+			chimeVolume,
+			errorHandler,
+			width,
+			height,
+			signal,
+		});
+	} else if (! (video instanceof HTMLVideoElement)) {
+		reject(new TypeError(`Expected a <video> but got a ${typeof video}.`));
+	} else if (signal instanceof AbortSignal && signal.aborted) {
 		reject(signal.reason);
 	} else {
 		let frame = NaN;
@@ -79,7 +126,6 @@ export async function createBarcodeScanner(callback = console.log, {
 			: controller.signal;
 
 		const scanner = new BarcodeDetector({ formats });
-		const video = document.createElement('video');
 		const wakeLock = 'wakeLock' in navigator
 			? await navigator.wakeLock.request('screen').catch(() => undefined)
 			: undefined;
@@ -97,7 +143,6 @@ export async function createBarcodeScanner(callback = console.log, {
 		const [track] = stream.getVideoTracks();
 
 		video.srcObject = stream;
-		video.play();
 
 		async function drawFrame() {
 			try {
@@ -150,6 +195,8 @@ export async function createBarcodeScanner(callback = console.log, {
 				loadController.abort(target.reason);
 			}
 		}, { once: true });
+
+		video.play();
 	}
 
 	return promise;

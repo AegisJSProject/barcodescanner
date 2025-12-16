@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.2.2] - 2025-12-16
+
+### Added
+- Add JSDocs to `createBarcodeScanner()`
+- Add `@typedef` for `DetectedBarcode`
+
+### Changed
+- `createBarcodeScanner()` can now be passed in a `<video>` or ID for a `<video>`, creating one if not given
+
 ## [v1.2.1] - 2025-12-10
 
 ### Changed
