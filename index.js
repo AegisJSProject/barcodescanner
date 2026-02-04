@@ -1,9 +1,9 @@
 import { createBarcodeScanner, preloadRxing } from '@aegisjsproject/barcodescanner/scanner.js';
-import { reset } from '@aegisjsproject/styles/reset.js';
-import { baseTheme, lightTheme, darkTheme } from '@aegisjsproject/styles/theme.js';
-import { btn, btnPrimary, btnDanger } from '@aegisjsproject/styles/button.js';
+import reset from '@aegisjsproject/styles/css/reset.css' with { type: 'css' };
+import theme from '@aegisjsproject/styles/css/theme.css' with { type: 'css' };
+import btn from '@aegisjsproject/styles/css/button.css' with { type: 'css' };
 
-document.adoptedStyleSheets = [reset, baseTheme, lightTheme, darkTheme, btn, btnPrimary, btnDanger];
+document.adoptedStyleSheets = [reset, theme, btn];
 
 preloadRxing();
 
