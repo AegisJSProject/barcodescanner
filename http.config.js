@@ -1,5 +1,5 @@
 import {
-	useDefaultCSP, addConnectSrc, addScriptSrc, addPrefetchSrc, addTrustedTypePolicy,
+	useDefaultCSP, addConnectSrc, addScriptSrc, addStyleSrc, addPrefetchSrc, addTrustedTypePolicy,
 	WASM_UNSAFE_EVAL, lockCSP,
 } from '@aegisjsproject/http-utils/csp';
 import { RXING_WASM, RXING_WASM_BG, RXING_WASM_BG_INTEGRITY, RXING_WASM_INTEGRITY } from './rxing.js';
@@ -16,6 +16,8 @@ addScriptSrc(
 	WASM_UNSAFE_EVAL,
 );
 
+addStyleSrc(importmap.resolve('@aegisjsproject/styles/css/'));
+
 addPrefetchSrc(RXING_WASM_BG, RXING_WASM);
 addConnectSrc(
 	RXING_WASM,
@@ -26,6 +28,7 @@ lockCSP();
 
 export default {
 	pathname: '/',
+	port: 8182,
 	open: true,
 	routes: {
 		'/': '@aegisjsproject/dev-server/home',
