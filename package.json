@@ -82,7 +82,7 @@
     "@shgysk8zer0/http-server": "^1.1.1",
     "@shgysk8zer0/importmap": "^1.7.7",
     "@shgysk8zer0/polyfills": "^0.6.0",
-    "eslint": "^9.25.1",
+    "eslint": "^10.0.0",
     "rollup": "^4.40.1"
   }
 }
