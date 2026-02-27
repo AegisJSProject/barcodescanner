@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.2.3] - 2026-02-27
+
+### Added
+- Add a `DisposableStack` to clean-up
+- Add support for passing a `base` (document or Shadow Root) to get `<video>` from
+- Support numerous forms of disposal
+
 ## [v1.2.2] - 2025-12-16
 
 ### Added

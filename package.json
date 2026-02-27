@@ -1,6 +1,6 @@
 {
   "name": "@aegisjsproject/barcodescanner",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "description": "A simple barcode scanner module ",
   "keywords": [
     "barcode",
@@ -78,11 +78,11 @@
     "@aegisjsproject/dev-server": "^1.0.5",
     "@aegisjsproject/http-utils": "^1.0.4",
     "@rollup/plugin-terser": "^0.4.4",
-    "@shgysk8zer0/eslint-config": "^1.0.4",
+    "@shgysk8zer0/eslint-config": "^1.0.5",
     "@shgysk8zer0/http-server": "^1.1.1",
-    "@shgysk8zer0/importmap": "^1.7.7",
-    "@shgysk8zer0/polyfills": "^0.6.0",
-    "eslint": "^10.0.0",
-    "rollup": "^4.40.1"
+    "@shgysk8zer0/importmap": "^1.7.11",
+    "@shgysk8zer0/polyfills": "^0.6.2",
+    "eslint": "^10.0.2",
+    "rollup": "^4.59.0"
   }
 }
