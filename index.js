@@ -7,17 +7,16 @@ document.adoptedStyleSheets = [reset, theme, btn];
 
 preloadRxing();
 
-function start() {
-	const controller = new AbortController();
-	const signal = controller.signal;
+async function start() {
 	const btn = document.getElementById('stop');
+	const stack = new DisposableStack();
 
 	createBarcodeScanner(({ rawValue, format }) => {
 		const li = document.createElement('li');
 		li.textContent = `[${format}] ${rawValue}`;
 		document.getElementById('results').append(li);
-	}, { frameRate: 24, signal, video: 'scanner', chimeType: 'sawtooth', chimeFrequency: 4000, chimeDuration: 0.1 }).catch(err => {
-		controller.abort(err);
+	}, { frameRate: 24, video: 'scanner', chimeType: 'sawtooth', chimeFrequency: 4000, chimeDuration: 0.1, stack }).catch(err => {
+		stack.disposeAsync();
 		reportError(err);
 		const li = document.createElement('li');
 		li.textContent = err.message;
@@ -25,10 +24,10 @@ function start() {
 	});
 
 	btn.addEventListener('click', ({ currentTarget }) => {
-		controller.abort();
+		stack.dispose();
 		currentTarget.disabled = true;
 		document.getElementById('start').disabled = false;
-	}, { once: true, signal });
+	}, { once: true });
 
 	btn.disabled = false;
 }

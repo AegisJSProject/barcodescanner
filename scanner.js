@@ -75,6 +75,8 @@ function _getConstraint(val) {
  * @param {OscillatorType} [options.chimeType="sine"] Shape of the audio for the chime
  * @param {number} [options.chimeVolume=0.2] Chime volume on detect
  * @param {Function} [options.errorHandler=reportError] Callback for handling errors
+ * @param {DocumentOrShadowRoot} [options.base=document] Base to query for video ID if passed a string/id for a `<video>`
+ * @param {DisposableStack|AsyncDisposableStack} [options.stack] Optional stack to handle disposal
  * @param {number} [options.width] Requested camera width
  * @param {number} [options.height] Requested camera height
  * @param {AbortSignal} [options.signal] Abort signal to abort the stream/video
@@ -91,6 +93,8 @@ export async function createBarcodeScanner(callback = console.log, {
 	chimeType = CHIME_TYPE,
 	chimeVolume = CHIME_VOLUME,
 	errorHandler = reportError,
+	base = document,
+	stack,
 	width,
 	height,
 	signal,
@@ -99,7 +103,7 @@ export async function createBarcodeScanner(callback = console.log, {
 
 	if (typeof video === 'string') {
 		return await createBarcodeScanner(callback, {
-			video: document.getElementById(video),
+			video: base.getElementById(video),
 			delay,
 			formats,
 			facingMode,
@@ -109,6 +113,7 @@ export async function createBarcodeScanner(callback = console.log, {
 			chimeType,
 			chimeVolume,
 			errorHandler,
+			stack,
 			width,
 			height,
 			signal,
@@ -117,20 +122,49 @@ export async function createBarcodeScanner(callback = console.log, {
 		reject(new TypeError(`Expected a <video> but got a ${typeof video}.`));
 	} else if (signal instanceof AbortSignal && signal.aborted) {
 		reject(signal.reason);
+	} else if (stack?.disposed) {
+		throw new DOMException('Stack was disposed.', 'AbortError');
 	} else {
 		let frame = NaN;
-		const controller = new AbortController();
-		const loadController = new AbortController();
+
+		/**
+		 * @type {{ adopt: <T>(value: T, onDispose: (val: T) => void) => T, dispose: () => void }}
+		*/
+		const disposableStack = stack instanceof DisposableStack || stack instanceof AsyncDisposableStack
+			? stack.use(new DisposableStack())
+			: new DisposableStack();
+
+		const controller = disposableStack.adopt(
+			new AbortController(),
+			controller => controller.abort(new DOMException('Stack disposed.', 'AbortError'))
+		);
+
+		const loadController = disposableStack.adopt(
+			new AbortController(),
+			controller => controller.abort(new DOMException('Stack disposed.', 'AbortError'))
+		);
+
 		const sig = signal instanceof AbortSignal
 			? AbortSignal.any([signal, controller.signal])
 			: controller.signal;
 
 		const scanner = new BarcodeDetector({ formats });
 		const wakeLock = 'wakeLock' in navigator
-			? await navigator.wakeLock.request('screen').catch(() => undefined)
+			? disposableStack.adopt(
+				await navigator.wakeLock.request('screen').catch(() => undefined),
+				lock => lock?.released || lock?.release()
+			)
 			: undefined;
 
-		const stream = await navigator.mediaDevices.getUserMedia({
+		disposableStack.defer(() => {
+			video.srcObject = null;
+			video.cancelVideoFrameCallback(frame);
+		});
+
+		/**
+		 * @type {MediaStream}
+		 */
+		const stream = disposableStack.adopt(await navigator.mediaDevices.getUserMedia({
 			audio: false,
 			video: {
 				frameRate: _getConstraint(frameRate),
@@ -138,7 +172,7 @@ export async function createBarcodeScanner(callback = console.log, {
 				width: _getConstraint(width),
 				height: _getConstraint(height),
 			},
-		});
+		}), stream => stream.getTracks().forEach(track => track.stop()));
 
 		const [track] = stream.getVideoTracks();
 
@@ -169,7 +203,7 @@ export async function createBarcodeScanner(callback = console.log, {
 			const { width, height } = track.getSettings();
 			target.width = width;
 			target.height = height;
-			resolve({ controller, video, stream, wakeLock, signal: sig });
+			resolve({ controller, video, stream, wakeLock, signal: sig, [Symbol.dispose]: disposableStack[Symbol.dispose].bind(disposableStack), stack: disposableStack });
 			drawFrame();
 			loadController.abort();
 		}, { once: true, signal: sig });
@@ -181,22 +215,13 @@ export async function createBarcodeScanner(callback = console.log, {
 			reject(err);
 		}, { once: true, signal: sig });
 
-		sig.addEventListener('abort', async ({ target }) => {
-			video.cancelVideoFrameCallback(frame);
-			video.pause();
-			video.srcObject = null;
-			stream.getTracks().forEach(track => track.stop());
+		sig?.addEventListener('abort', disposableStack.dispose.bind(disposableStack), { once: true });
 
-			if (typeof wakeLock === 'object') {
-				await wakeLock.release();
-			}
-
-			if (! loadController.signal.aborted) {
-				loadController.abort(target.reason);
-			}
-		}, { once: true });
-
-		video.play();
+		video.play().catch(err => {
+			reject(err);
+			controller.abort(err);
+			disposableStack.dispose();
+		});
 	}
 
 	return promise;
